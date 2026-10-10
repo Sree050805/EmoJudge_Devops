@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmoJudge - Attorney Login</title>
+    <style>
+ body {
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        background: #121212; /* Deep Blue */
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        text-align: center;
+    }
+
+    /* Project Title */
+    .title {
+        color: gold; /* Pure White */
+        font-size: 28px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px rgba(255, 255, 255, 0.5);
+    }
+
+    /* Welcome Message */
+    .welcome-message {
+        color:gold; /* Light Blue-White */
+        font-size: 16px;
+        margin-bottom: 20px;
+        max-width: 400px;
+    }
+
+    /* Login Box */
+    .login-container {
+        background: rgba(255, 255, 255, 0.15); /* Light Transparent White */
+        padding: 30px;
+        border-radius: 10px;
+        text-align: center;
+        box-shadow: 0px 4px 10px rgba(255, 255, 255, 0.3);
+        width: 350px;
+    }
+
+    /* Heading */
+    h2 {
+        color: peachpuff;
+        margin-bottom: 20px;
+        text-shadow: 1px 1px 3px rgba(255, 255, 255, 0.7);
+    }
+
+    /* Input Fields */
+    input {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 2px solid lavender;
+        border-radius: 5px;
+        background: rgba(255, 255, 255, 0.2);
+        color: #FFF;
+        font-size: 16px;
+    }
+
+    input::placeholder {
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* Password Container */
+    .password-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .toggle-password {
+        position: absolute;
+        right: 10px;
+        cursor: pointer;
+        color: #FFF;
+    }
+
+    /* Login Button */
+    button {
+        width: 100%;
+        padding: 10px;
+        background-color: gold; 
+        color: black;
+        font-weight: bold;
+        border: none;
+        border-radius: 5px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: 0.3s ease-in-out;
+    }
+
+    button:hover {
+        background-color: #E0E7FF; /* Soft Blue-White */
+        transform: scale(1.05);
+    }
+
+    /* Forgot Password */
+    .forgot-password {
+        display: block;
+        color: white;
+        margin-top: 10px;
+        text-decoration: none;
+        font-size: 14px;
+    }
+
+    .forgot-password-link {
+    display: block;
+    color: red;
+    margin-top: 20px; 
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.forgot-password-link:hover {
+    text-decoration: underline; 
+    color: darkgray;
+}
+
+.forgot-password-modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+    label {
+        color: #FFF;
+        font-weight: bold;
+    }
+
+    .error-message {
+        color: red;
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+    .signup-link {
+    display: block;
+    margin-top: 10px;
+    color: lightblue;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.signup-link:hover {
+    text-decoration: underline;
+    color: gold;
+}
+
+    </style>
+</head>
+<body>
+
+    <!-- Project Title & Welcome Message -->
+    <div class="title">EMOJUDGE</div>
+    <p class="welcome-message">
+        Welcome to EmoJudge, the AI-powered emotion analysis platform designed for legal professionals.  
+        Log in to analyze witness testimonies and gain deeper insights into case dynamics.
+    </p>
+
+    <div class="login-container">
+        <h2>Attorney Login</h2>
+        
+        <!-- Form action points to /login route in Flask -->
+        <form action="/" method="POST">
+            <label for="attorney_id">Attorney ID</label>
+            <input type="text" id="attorney_id" name="attorney_id" placeholder="Enter your ID" required>
+
+            <label for="password">Password</label>
+            <div class="password-container">
+                <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                <span class="toggle-password" onclick="togglePassword()">👁</span>
+            </div>
+
+            <button type="submit">Login</button>
+            
+            <a href="{{ url_for('forgot_password') }}" class="forgot-password">Forgot Password?</a>
+            <a href="/signup" class="signup-link">New here? Create an account</a>
+            <p style="color: red; font-weight: bold;">{{ error }}</p>
+
+        </form>
+    </div>
+
+    <script>
+        function togglePassword() {
+            var passwordField = document.getElementById("password");
+            passwordField.type = passwordField.type === "password" ? "text" : "password";
+        }
+    
+    </script>
+
+</body>
+</html>

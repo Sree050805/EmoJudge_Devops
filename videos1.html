@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EmoJudge – Analysis</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d0d0d; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    header h1 { font-size: 22px; letter-spacing: 2px; }
+    .logout-btn { background: gold; color: black; border: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+    .filter-bar { text-align: center; margin-bottom: 20px; }
+    .filter-bar select { padding: 8px 14px; font-size: 15px; border-radius: 5px; background: #111; color: gold; border: 1px solid gold; }
+
+    .video-container { display: flex; justify-content: center; flex-wrap: wrap; gap: 28px; }
+    .video-item { display: flex; flex-direction: column; align-items: center; max-width: 380px; }
+    .video-item video { width: 380px; height: 230px; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 12px rgba(255,215,0,.3); transition: transform .3s; }
+    .video-item video:hover { transform: scale(1.04); }
+    .video-item p { color: #ffd700; font-size: 13px; margin-top: 8px; text-align: center; }
+    .video-card { width: 380px; height: 230px; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 12px rgba(255,215,0,.3); transition: transform .3s; background: #1a1a1a; border: 1px solid rgba(255,215,0,.3); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+    .video-card:hover { transform: scale(1.04); border-color: gold; }
+    .video-card .play-icon { font-size: 52px; }
+    .video-card .card-title { color: gold; font-size: 14px; font-weight: bold; }
+
+    /* ── Full-screen overlay ── */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.96); z-index: 999;
+               flex-direction: row; align-items: stretch; padding: 50px 20px 20px; gap: 16px; }
+    .overlay.active { display: flex; }
+    .close-btn { position: absolute; top: 10px; right: 20px; background: gold; color: black;
+                 border: none; padding: 7px 13px; border-radius: 5px; font-size: 15px; cursor: pointer; }
+
+    #fullScreenVideo { flex: 0 0 58%; border-radius: 10px; max-height: 100%; }
+
+    /* ── Side panel ── */
+    .side-panel { flex: 0 0 32%;; background: #1a1a1a; border-radius: 10px; padding: 18px;
+                  display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+    .side-panel h3 { color: gold; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 6px; }
+
+    .emotion-badge { font-size: 22px; font-weight: bold; text-transform: capitalize; }
+    .confidence-bar-wrap { background: #333; border-radius: 4px; height: 10px; overflow: hidden; }
+    .confidence-bar { height: 100%; background: gold; transition: width .4s; }
+
+    .scores-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; }
+    .score-item { background: #222; border-radius: 5px; padding: 5px 8px; }
+    .score-item span { float: right; color: gold; }
+
+    .advice-box { background: #222; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; }
+    .deception-box { display:none; background: #3a0000; border: 1px solid #ff4444; border-radius: 8px; padding: 10px; font-size: 13px; color: #ff6b6b; line-height: 1.5; }
+
+    /* Timeline chart */
+    .chart-wrap { background: #111; border-radius: 8px; padding: 10px; }
+    #timelineChart { max-height: 140px; }
+
+    /* Case notes */
+    .notes-section textarea { width: 100%; background: #111; color: gold; border: 1px solid #444;
+                               border-radius: 6px; padding: 8px; font-size: 13px; resize: vertical; min-height: 60px; }
+    .notes-section button { margin-top: 6px; background: gold; color: black; border: none;
+                             padding: 6px 14px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; }
+    .notes-list { list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
+    .notes-list li { background: #1e1e1e; border-radius: 6px; padding: 7px 10px; font-size: 12px;
+                     display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .notes-list li .del { background: none; border: none; color: #ff4444; cursor: pointer; font-size: 14px; flex-shrink: 0; }
+
+    .spinner { border: 3px solid #333; border-top: 3px solid gold; border-radius: 50%;
+               width: 24px; height: 24px; animation: spin 1s linear infinite; display: none; margin: auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚖ EMOJUDGE</h1>
+  <form action="/logout" method="get">
+    <button class="logout-btn">Logout</button>
+  </form>
+</header>
+
+<div class="filter-bar">
+  <label for="contextFilter">Filter by Context: </label>
+  <select id="contextFilter" onchange="filterVideos()">
+    <option value="all">All</option>
+    <option value="burglary">Burglary</option>
+    <option value="home">Home Invasion</option>
+    <option value="fraud">Fraud</option>
+    <option value="accident">Accident</option>
+    <option value="harassment">Harassment</option>
+    <option value="cyber">Cybercrime</option>
+    <option value="murder">Murder</option>
+  </select>
+</div>
+
+<div class="video-container" id="videoSelection">
+  <div class="video-item" data-context="burglary">
+    <div class="video-card" onclick="openFullScreen('{{ url_for('serve_video', filename='video1.mp4') }}', 'video1.mp4')">
+      <div class="play-icon">▶️</div>
+      <div class="card-title">Witness 1</div>
+    </div>
+    <p>Recalling events of a late-night burglary at a convenience store.</p>
+  </div>
+  <div class="video-item" data-context="home">
+    <div class="video-card" onclick="openFullScreen('{{ url_for('serve_video', filename='video2.mp4') }}', 'video2.mp4')">
+      <div class="play-icon">▶️</div>
+      <div class="card-title">Witness 2</div>
+    </div>
+    <p>Describing confrontation with the accused during a home invasion.</p>
+  </div>
+  <div class="video-item" data-context="fraud">
+    <div class="video-card" onclick="openFullScreen('{{ url_for('serve_video', filename='video3.mp4') }}', 'video3.mp4')">
+      <div class="play-icon">▶️</div>
+      <div class="card-title">Witness 3</div>
+    </div>
+    <p>Responding to questions about stolen documents in a corporate fraud case.</p>
+  </div>
+</div>
+
+<!-- Full-screen overlay -->
+<div id="overlay" class="overlay">
+  <button class="close-btn" onclick="closeFullScreen()">✖ Close</button>
+  <video id="fullScreenVideo" controls></video>
+
+  <div class="side-panel">
+    <h3>🧠 Emotion Analysis</h3>
+    <div class="spinner" id="spinner"></div>
+
+    <div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:4px;">Detected Emotion</div>
+      <div class="emotion-badge" id="emotionBadge">—</div>
+    </div>
+
+    <div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:4px;">Confidence: <span id="confText">—</span></div>
+      <div class="confidence-bar-wrap"><div class="confidence-bar" id="confBar" style="width:0%"></div></div>
+    </div>
+
+    <div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:6px;">All Scores</div>
+      <div class="scores-grid" id="scoresGrid"></div>
+    </div>
+
+    <div class="advice-box" id="adviceBox">Advice will appear here.</div>
+      <div class="deception-box" id="deceptionBox"></div>
+
+    <div class="chart-wrap">
+      <div style="font-size:12px;color:#aaa;margin-bottom:6px;">Emotion Timeline</div>
+      <canvas id="timelineChart"></canvas>
+    </div>
+
+    <div class="notes-section">
+      <h3>📝 Case Notes</h3>
+      <textarea id="noteInput" placeholder="Add a note about this witness…"></textarea>
+      <button onclick="saveNote()">Save Note</button>
+      <ul class="notes-list" id="notesList"></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let currentVideo = null;
+  let currentVideoName = "";
+  let emotionInterval = null;
+  let timelineChart = null;
+  const timelineData = { labels: [], datasets: [] };
+  const EMOTIONS = ["angry","disgust","fear","happy","sad","surprise","neutral"];
+  const COLORS = ["#e74c3c","#8e44ad","#3498db","#2ecc71","#95a5a6","#f39c12","#bdc3c7"];
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
+  function filterVideos() {
+    const f = document.getElementById("contextFilter").value;
+    document.querySelectorAll(".video-item").forEach(el => {
+      el.style.display = (f === "all" || el.dataset.context === f) ? "flex" : "none";
+    });
+  }
+
+  // ── Open / Close ───────────────────────────────────────────────────────────
+  function openFullScreen(src, name) {
+    currentVideoName = name;
+    const fsv = document.getElementById("fullScreenVideo");
+    fsv.src = src;
+    document.getElementById("videoSelection").style.display = "none";
+    document.getElementById("overlay").classList.add("active");
+    fsv.play();
+    currentVideo = fsv;
+    initChart();
+    loadNotes();
+    emotionInterval = setInterval(analyzeEmotions, 4000);
+  }
+
+  function closeFullScreen() {
+    document.getElementById("fullScreenVideo").pause();
+    document.getElementById("overlay").classList.remove("active");
+    document.getElementById("videoSelection").style.display = "flex";
+    clearInterval(emotionInterval);
+    if (timelineChart) { timelineChart.destroy(); timelineChart = null; }
+    timelineData.labels = [];
+    timelineData.datasets = [];
+  }
+
+  // ── Chart ──────────────────────────────────────────────────────────────────
+  function initChart() {
+    const ctx = document.getElementById("timelineChart").getContext("2d");
+    timelineChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: EMOTIONS.map((e, i) => ({
+          label: e, data: [], borderColor: COLORS[i],
+          backgroundColor: "transparent", tension: 0.3,
+          pointRadius: 2, borderWidth: 1.5,
+        }))
+      },
+      options: {
+        animation: false,
+        plugins: { legend: { labels: { color: "gold", font: { size: 10 }, boxWidth: 10 } } },
+        scales: {
+          x: { ticks: { color: "#aaa", font: { size: 9 } }, grid: { color: "#222" } },
+          y: { min: 0, max: 100, ticks: { color: "#aaa", font: { size: 9 } }, grid: { color: "#222" } }
+        }
+      }
+    });
+  }
+
+  function pushToChart(time, scores) {
+    const label = time + "s";
+    timelineData.labels.push(label);
+    timelineChart.data.labels.push(label);
+    EMOTIONS.forEach((e, i) => {
+      timelineChart.data.datasets[i].data.push(scores[e] ?? 0);
+    });
+    if (timelineChart.data.labels.length > 30) {
+      timelineChart.data.labels.shift();
+      timelineChart.data.datasets.forEach(ds => ds.data.shift());
+    }
+    timelineChart.update();
+  }
+
+  // ── Emotion analysis ───────────────────────────────────────────────────────
+  async function analyzeEmotions() {
+    if (!currentVideo) return;
+    document.getElementById("spinner").style.display = "block";
+    const time = Math.round(currentVideo.currentTime);
+    try {
+      const res = await fetch("http://127.0.0.1:8000/analyze_emotion/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_path: currentVideoName, time })
+      });
+      const data = await res.json();
+      if (data.error) return;
+
+      document.getElementById("emotionBadge").textContent = data.detected_emotion;
+      document.getElementById("confText").textContent = data.confidence + "%";
+      document.getElementById("confBar").style.width = data.confidence + "%";
+      document.getElementById("adviceBox").textContent = data.advice;
+
+      const db = document.getElementById("deceptionBox");
+      if (data.deception_signal) {
+        db.textContent = data.deception_signal;
+        db.style.display = "block";
+      } else {
+        db.style.display = "none";
+      }
+
+      // Scores grid
+      const grid = document.getElementById("scoresGrid");
+      grid.innerHTML = Object.entries(data.scores)
+        .sort((a,b) => b[1]-a[1])
+        .map(([e,v]) => `<div class="score-item">${e}<span>${v}%</span></div>`)
+        .join("");
+
+      pushToChart(time, data.scores);
+    } catch(e) {
+      console.error("Emotion fetch error:", e);
+    } finally {
+      document.getElementById("spinner").style.display = "none";
+    }
+  }
+
+  // ── Case notes ─────────────────────────────────────────────────────────────
+  async function loadNotes() {
+    const res = await fetch("/api/notes");
+    const notes = await res.json();
+    renderNotes(notes.filter(n => n.video === currentVideoName));
+  }
+
+  function renderNotes(notes) {
+    document.getElementById("notesList").innerHTML = notes.map(n =>
+      `<li><span>${n.note}<br><small style="color:#666">${n.created_at}</small></span>
+       <button class="del" onclick="deleteNote(${n.id})">✕</button></li>`
+    ).join("");
+  }
+
+  async function saveNote() {
+    const text = document.getElementById("noteInput").value.trim();
+    if (!text) return;
+    await fetch("/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ video: currentVideoName, note: text })
+    });
+    document.getElementById("noteInput").value = "";
+    loadNotes();
+  }
+
+  async function deleteNote(id) {
+    await fetch(`/api/notes/${id}`, { method: "DELETE" });
+    loadNotes();
+  }
+
+  // ── Microphone voice detection ─────────────────────────────────────────────
+  let isSpeaking = false;
+  (async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const analyser = ctx.createAnalyser();
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const proc = ctx.createScriptProcessor(2048, 1, 1);
+      analyser.connect(proc); proc.connect(ctx.destination);
+      analyser.fftSize = 1024;
+      proc.onaudioprocess = () => {
+        const arr = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(arr);
+        const vol = arr.reduce((a,b)=>a+b,0)/arr.length;
+        if (vol > 30 && !isSpeaking) { isSpeaking = true; sendVoice(true); }
+        else if (vol <= 15 && isSpeaking) { isSpeaking = false; sendVoice(false); }
+      };
+    } catch(e) { console.warn("Mic unavailable:", e); }
+  })();
+
+  function sendVoice(speaking) {
+    fetch("/update_voice_status", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ speaking })
+    });
+  }
+</script>
+</body>
+</html>
