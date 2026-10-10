@@ -442,7 +442,25 @@ def emotion_history(video_name):
             "history": []
         })
 
+# ── Emotion Analysis Proxy ────────────────────────────────────────────────────
 
+@app.route("/api/analyze_emotion", methods=["POST"])
+@login_required
+def analyze_emotion_proxy():
+    try:
+        response = requests.post(
+            f"{FASTAPI_URL}/analyze_emotion/",
+            json=request.get_json(),
+            timeout=30
+        )
+
+        return jsonify(response.json()), response.status_code
+
+    except requests.RequestException as e:
+        return jsonify({
+            "error": "AI service unavailable",
+            "details": str(e)
+        }), 503
 # ── Voice Status ──────────────────────────────────────────────────────────────
 
 is_speaking = False

@@ -244,7 +244,7 @@
     document.getElementById("spinner").style.display = "block";
     const time = Math.round(currentVideo.currentTime);
     try {
-      const res = await fetch("http://127.0.0.1:8000/analyze_emotion/", {
+      const res = await fetch("/api/analyze_emotion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ video_path: currentVideoName, time })
