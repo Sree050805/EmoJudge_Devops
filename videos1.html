@@ -6,68 +6,395 @@
   <title>EmoJudge – Analysis</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0d0d0d; color: gold; font-family: Arial, sans-serif; padding: 20px; }
+   <style>
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    header h1 { font-size: 22px; letter-spacing: 2px; }
-    .logout-btn { background: gold; color: black; border: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+  body {
+    background: #0d0d0d;
+    color: gold;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+  }
 
-    .filter-bar { text-align: center; margin-bottom: 20px; }
-    .filter-bar select { padding: 8px 14px; font-size: 15px; border-radius: 5px; background: #111; color: gold; border: 1px solid gold; }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
 
-    .video-container { display: flex; justify-content: center; flex-wrap: wrap; gap: 28px; }
-    .video-item { display: flex; flex-direction: column; align-items: center; max-width: 380px; }
-    .video-item video { width: 380px; height: 230px; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 12px rgba(255,215,0,.3); transition: transform .3s; }
-    .video-item video:hover { transform: scale(1.04); }
-    .video-item p { color: #ffd700; font-size: 13px; margin-top: 8px; text-align: center; }
-    .video-card { width: 380px; height: 230px; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 12px rgba(255,215,0,.3); transition: transform .3s; background: #1a1a1a; border: 1px solid rgba(255,215,0,.3); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
-    .video-card:hover { transform: scale(1.04); border-color: gold; }
-    .video-card .play-icon { font-size: 52px; }
-    .video-card .card-title { color: gold; font-size: 14px; font-weight: bold; }
+  header h1 {
+    font-size: 22px;
+    letter-spacing: 2px;
+  }
 
-    /* ── Full-screen overlay ── */
-    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.96); z-index: 999;
-               flex-direction: row; align-items: stretch; padding: 50px 20px 20px; gap: 16px; }
-    .overlay.active { display: flex; }
-    .close-btn { position: absolute; top: 10px; right: 20px; background: gold; color: black;
-                 border: none; padding: 7px 13px; border-radius: 5px; font-size: 15px; cursor: pointer; }
+  .logout-btn {
+    background: gold;
+    color: black;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    font-weight: bold;
+    cursor: pointer;
+  }
 
-    #fullScreenVideo { flex: 0 0 58%; border-radius: 10px; max-height: 100%; }
+  .filter-bar {
+    text-align: center;
+    margin-bottom: 20px;
+  }
 
-    /* ── Side panel ── */
-    .side-panel { flex: 0 0 32%; background: #1a1a1a; border-radius: 10px; padding: 18px;
-                  display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
-    .side-panel h3 { color: gold; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 6px; }
+  .filter-bar select {
+    padding: 8px 14px;
+    font-size: 15px;
+    border-radius: 5px;
+    background: #111;
+    color: gold;
+    border: 1px solid gold;
+  }
 
-    .emotion-badge { font-size: 22px; font-weight: bold; text-transform: capitalize; }
-    .confidence-bar-wrap { background: #333; border-radius: 4px; height: 10px; overflow: hidden; }
-    .confidence-bar { height: 100%; background: gold; transition: width .4s; }
+  .video-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 28px;
+  }
 
-    .scores-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; }
-    .score-item { background: #222; border-radius: 5px; padding: 5px 8px; }
-    .score-item span { float: right; color: gold; }
+  .video-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 380px;
+  }
 
-    .advice-box { background: #222; border-radius: 8px; padding: 10px; font-size: 13px; line-height: 1.5; }
-    .deception-box { display:none; background: #3a0000; border: 1px solid #ff4444; border-radius: 8px; padding: 10px; font-size: 13px; color: #ff6b6b; line-height: 1.5; }
+  .video-item video {
+    width: 380px;
+    height: 230px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,215,0,.3);
+    transition: transform .3s;
+  }
 
-    /* Timeline chart */
-    .chart-wrap { background: #111; border-radius: 8px; padding: 10px; }
-    #timelineChart { max-height: 140px; }
+  .video-item video:hover {
+    transform: scale(1.04);
+  }
 
-    /* Case notes */
-    .notes-section textarea { width: 100%; background: #111; color: gold; border: 1px solid #444;
-                               border-radius: 6px; padding: 8px; font-size: 13px; resize: vertical; min-height: 60px; }
-    .notes-section button { margin-top: 6px; background: gold; color: black; border: none;
-                             padding: 6px 14px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 13px; }
-    .notes-list { list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
-    .notes-list li { background: #1e1e1e; border-radius: 6px; padding: 7px 10px; font-size: 12px;
-                     display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-    .notes-list li .del { background: none; border: none; color: #ff4444; cursor: pointer; font-size: 14px; flex-shrink: 0; }
+  .video-item p {
+    color: #ffd700;
+    font-size: 13px;
+    margin-top: 8px;
+    text-align: center;
+  }
 
-    .spinner { border: 3px solid #333; border-top: 3px solid gold; border-radius: 50%;
-               width: 24px; height: 24px; animation: spin 1s linear infinite; display: none; margin: auto; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+  .video-card {
+    width: 380px;
+    height: 230px;
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(255,215,0,.3);
+    transition: transform .3s;
+    background: #1a1a1a;
+    border: 1px solid rgba(255,215,0,.3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .video-card:hover {
+    transform: scale(1.04);
+    border-color: gold;
+  }
+
+  .video-card .play-icon {
+    font-size: 52px;
+  }
+
+  .video-card .card-title {
+    color: gold;
+    font-size: 14px;
+    font-weight: bold;
+  }
+
+  /* ==============================
+     FULL SCREEN OVERLAY
+     ============================== */
+
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.96);
+    z-index: 999;
+
+    flex-direction: row;
+    align-items: stretch;
+
+    width: 100vw;
+    height: 100vh;
+
+    padding: 60px 20px 20px;
+    gap: 16px;
+
+    overflow: hidden;
+  }
+
+  .overlay.active {
+    display: flex;
+  }
+
+  .close-btn {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+
+    background: gold;
+    color: black;
+    border: none;
+
+    padding: 7px 13px;
+    border-radius: 5px;
+    font-size: 15px;
+    cursor: pointer;
+
+    z-index: 1001;
+  }
+
+  /* ==============================
+     VIDEO
+     ============================== */
+
+  #fullScreenVideo {
+    /*
+       IMPORTANT:
+       Video takes whatever space remains AFTER
+       reserving space for the analysis panel.
+    */
+    flex: 1 1 0;
+
+    min-width: 0;
+    width: 0;
+
+    height: 100%;
+    max-height: 100%;
+
+    object-fit: contain;
+
+    background: black;
+    border-radius: 10px;
+  }
+
+  /* ==============================
+     EMOTION ANALYSIS PANEL
+     ============================== */
+
+  .side-panel {
+    /*
+       Fixed panel width means Video 1/2/3 cannot
+       push this panel outside the screen.
+    */
+    flex: 0 0 400px;
+
+    width: 400px;
+    min-width: 400px;
+    max-width: 400px;
+
+    height: 100%;
+
+    background: #1a1a1a;
+    border-radius: 10px;
+    padding: 18px;
+
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .side-panel h3 {
+    color: gold;
+    font-size: 16px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 6px;
+  }
+
+  .emotion-badge {
+    font-size: 22px;
+    font-weight: bold;
+    text-transform: capitalize;
+  }
+
+  .confidence-bar-wrap {
+    background: #333;
+    border-radius: 4px;
+    height: 10px;
+    overflow: hidden;
+  }
+
+  .confidence-bar {
+    height: 100%;
+    background: gold;
+    transition: width .4s;
+  }
+
+  .scores-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .score-item {
+    background: #222;
+    border-radius: 5px;
+    padding: 5px 8px;
+  }
+
+  .score-item span {
+    float: right;
+    color: gold;
+  }
+
+  .advice-box {
+    background: #222;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .deception-box {
+    display: none;
+    background: #3a0000;
+    border: 1px solid #ff4444;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    color: #ff6b6b;
+    line-height: 1.5;
+  }
+
+  /* Timeline */
+
+  .chart-wrap {
+    background: #111;
+    border-radius: 8px;
+    padding: 10px;
+    width: 100%;
+  }
+
+  #timelineChart {
+    max-height: 140px;
+    width: 100% !important;
+  }
+
+  /* Case Notes */
+
+  .notes-section textarea {
+    width: 100%;
+    background: #111;
+    color: gold;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 60px;
+  }
+
+  .notes-section button {
+    margin-top: 6px;
+    background: gold;
+    color: black;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 5px;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .notes-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 140px;
+    overflow-y: auto;
+  }
+
+  .notes-list li {
+    background: #1e1e1e;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .notes-list li .del {
+    background: none;
+    border: none;
+    color: #ff4444;
+    cursor: pointer;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* Spinner */
+
+  .spinner {
+    border: 3px solid #333;
+    border-top: 3px solid gold;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+    display: none;
+    margin: auto;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ==============================
+     SMALLER SCREENS
+     ============================== */
+
+  @media (max-width: 900px) {
+    .overlay {
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    #fullScreenVideo {
+      width: 100%;
+      height: auto;
+      min-height: 45vh;
+      flex: none;
+    }
+
+    .side-panel {
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      height: auto;
+      flex: none;
+    }
+  }
+</style>
   </style>
 </head>
 <body>
