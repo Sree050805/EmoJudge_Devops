@@ -1,686 +1,1325 @@
-from flask import (
-    Flask,
-    render_template,
-    request,
-    Response,
-    redirect,
-    url_for,
-    session,
-    send_from_directory,
-    jsonify
-)
+<!DOCTYPE html>
+<html lang="en">
 
-import sqlite3
-import datetime
-import requests
-import os
-from pathlib import Path
+<head>
 
-from werkzeug.security import check_password_hash, generate_password_hash
-import jwt as pyjwt
+    <meta charset="UTF-8">
 
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-# ── Application Configuration ─────────────────────────────────────────────────
+    <title>EmoJudge – Command Center</title>
 
-BASE_DIR = Path(__file__).resolve().parent
+    <style>
 
-app = Flask(
-    __name__,
-    template_folder=str(BASE_DIR),
-    static_folder=str(BASE_DIR)
-)
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-app.secret_key = os.getenv(
-    "FLASK_SECRET_KEY",
-    "emojudge_secret_2025"
-)
+        body {
+            min-height: 100vh;
+            background:
+                radial-gradient(
+                    circle at top right,
+                    rgba(255, 215, 0, 0.07),
+                    transparent 30%
+                ),
+                #0d0d0d;
 
-JWT_SECRET = os.getenv(
-    "JWT_SECRET",
-    "emojudge_jwt_secret"
-)
+            color: #f5f5f5;
+            font-family: Arial, sans-serif;
+        }
 
-# Local development:
-# http://127.0.0.1:8000
-#
-# Docker / Kubernetes override this using FASTAPI_URL.
-FASTAPI_URL = os.getenv(
-    "FASTAPI_URL",
-    "http://127.0.0.1:8000"
-)
 
+        /* ─────────────────────────────────────
+           HEADER
+           ───────────────────────────────────── */
 
-# ── Database Helpers ──────────────────────────────────────────────────────────
+        header {
+            height: 72px;
 
-def get_db():
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
 
-    db_path = BASE_DIR / "users.db"
+            padding: 0 6%;
 
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+            border-bottom:
+                1px solid rgba(255, 215, 0, 0.18);
 
-    return conn
+            background: rgba(10, 10, 10, 0.96);
+        }
 
 
-def init_db():
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
 
-    conn = get_db()
 
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            attorney_id TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            email TEXT
-        );
+        .brand-icon {
+            font-size: 28px;
+        }
 
-        CREATE TABLE IF NOT EXISTS case_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            attorney_id TEXT NOT NULL,
-            video TEXT NOT NULL,
-            note TEXT NOT NULL,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-    """)
 
-    conn.commit()
-    conn.close()
+        .brand h1 {
+            color: gold;
 
+            font-size: 21px;
 
-init_db()
+            letter-spacing: 2px;
+        }
 
 
-# ── Authentication Helpers ────────────────────────────────────────────────────
+        .brand span {
+            display: block;
 
-def make_jwt(attorney_id: str) -> str:
+            color: #777;
 
-    payload = {
-        "sub": attorney_id,
-        "exp": datetime.datetime.utcnow()
-        + datetime.timedelta(hours=8),
-    }
+            font-size: 10px;
 
-    return pyjwt.encode(
-        payload,
-        JWT_SECRET,
-        algorithm="HS256"
-    )
+            letter-spacing: 1.5px;
 
+            margin-top: 3px;
+        }
 
-def verify_jwt(token: str):
 
-    try:
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+        }
 
-        return pyjwt.decode(
-            token,
-            JWT_SECRET,
-            algorithms=["HS256"]
-        )
 
-    except pyjwt.PyJWTError:
+        .attorney-info {
+            text-align: right;
+        }
 
-        return None
 
+        .attorney-info small {
+            display: block;
 
-def login_required(f):
+            color: #777;
 
-    from functools import wraps
+            font-size: 10px;
 
-    @wraps(f)
-    def decorated(*args, **kwargs):
+            letter-spacing: 1px;
 
-        if "attorney_id" not in session:
+            text-transform: uppercase;
+        }
 
-            return redirect(
-                url_for("login")
-            )
 
-        return f(*args, **kwargs)
+        .attorney-info strong {
+            color: #ddd;
 
-    return decorated
+            font-size: 13px;
+        }
 
 
-# ── Health Check ──────────────────────────────────────────────────────────────
+        .logout-btn {
+            display: inline-block;
 
-@app.route("/health")
-def health():
+            background: gold;
+            color: #000;
 
-    return jsonify({
-        "status": "healthy",
-        "service": "emojudge-web"
-    }), 200
+            border: none;
+            border-radius: 5px;
 
+            padding: 9px 17px;
 
-# ── Authentication Routes ─────────────────────────────────────────────────────
+            font-size: 12px;
+            font-weight: bold;
 
-@app.route("/", methods=["GET", "POST"])
-def login():
+            text-decoration: none;
 
-    # If already logged in, go directly to dashboard.
-    if request.method == "GET" and "attorney_id" in session:
+            cursor: pointer;
 
-        return redirect(
-            url_for("dashboard")
-        )
+            transition: 0.2s;
+        }
 
-    if request.method == "POST":
 
-        attorney_id = request.form["attorney_id"]
-        password = request.form["password"]
+        .logout-btn:hover {
+            background: #ffe34d;
+            transform: translateY(-1px);
+        }
 
-        conn = get_db()
 
-        row = conn.execute(
-            """
-            SELECT password
-            FROM users
-            WHERE attorney_id=?
-            """,
-            (attorney_id,)
-        ).fetchone()
+        /* ─────────────────────────────────────
+           MAIN
+           ───────────────────────────────────── */
 
-        conn.close()
+        main {
+            width: min(1180px, 90%);
 
-        if row and check_password_hash(
-            row["password"],
-            password
-        ):
+            margin: 0 auto;
 
-            session["attorney_id"] = attorney_id
-            session["jwt"] = make_jwt(attorney_id)
+            padding: 50px 0 55px;
+        }
 
-            # NEW FLOW:
-            # Login -> Dashboard -> Witness Analysis
-            return redirect(
-                url_for("dashboard")
-            )
 
-        return render_template(
-            "login.html",
-            error="Invalid Attorney ID or Password."
-        )
+        .eyebrow {
+            color: gold;
 
-    return render_template(
-        "login.html",
-        error=None
-    )
+            font-size: 11px;
 
+            letter-spacing: 3px;
 
-@app.route("/signup", methods=["GET", "POST"])
-def signup():
+            font-weight: bold;
 
-    if request.method == "POST":
+            margin-bottom: 12px;
+        }
 
-        attorney_id = request.form["attorney_id"]
 
-        password = generate_password_hash(
-            request.form["password"]
-        )
+        .hero h2 {
+            color: #fff;
 
-        email = request.form["email"]
+            font-size: clamp(28px, 4vw, 43px);
 
-        conn = get_db()
+            margin-bottom: 12px;
+        }
 
-        try:
 
-            conn.execute(
-                """
-                INSERT INTO users
-                (attorney_id, password, email)
-                VALUES (?, ?, ?)
-                """,
-                (
-                    attorney_id,
-                    password,
-                    email
-                )
-            )
+        .hero h2 span {
+            color: gold;
+        }
 
-            conn.commit()
 
-        except sqlite3.IntegrityError:
+        .hero-description {
+            max-width: 690px;
 
-            conn.close()
+            color: #999;
 
-            return render_template(
-                "signup.html",
-                error="Attorney ID already exists."
-            )
+            line-height: 1.7;
 
-        conn.close()
+            font-size: 14px;
+        }
 
-        return redirect(
-            url_for("login")
-        )
 
-    return render_template(
-        "signup.html",
-        error=None
-    )
+        /* ─────────────────────────────────────
+           STATS
+           ───────────────────────────────────── */
 
+        .stats-grid {
+            display: grid;
 
-@app.route(
-    "/forgot-password",
-    methods=["GET", "POST"]
-)
-def forgot_password():
+            grid-template-columns:
+                repeat(4, minmax(0, 1fr));
 
-    message = ""
-    success = False
+            gap: 16px;
 
-    if request.method == "POST":
+            margin-top: 36px;
+        }
 
-        email = request.form["email"]
 
-        conn = get_db()
+        .stat-card {
+            position: relative;
 
-        user = conn.execute(
-            """
-            SELECT *
-            FROM users
-            WHERE email=?
-            """,
-            (email,)
-        ).fetchone()
+            background: #151515;
 
-        if user:
+            border:
+                1px solid rgba(255, 215, 0, 0.16);
 
-            message = (
-                "Reset link sent to your email."
-            )
+            border-radius: 10px;
 
-            success = True
+            padding: 21px;
 
-        else:
+            overflow: hidden;
+        }
 
-            try:
 
-                conn.execute(
-                    """
-                    INSERT INTO users
-                    (attorney_id, password, email)
-                    VALUES (?, ?, ?)
-                    """,
-                    (
-                        "",
-                        "",
-                        email
-                    )
-                )
+        .stat-card::before {
+            content: "";
 
-                conn.commit()
+            position: absolute;
 
-                message = (
-                    "Email registered. "
-                    "Reset link sent."
-                )
+            top: 0;
+            left: 0;
 
-                success = True
+            width: 3px;
+            height: 100%;
 
-            except sqlite3.IntegrityError:
+            background: gold;
+        }
 
-                message = (
-                    "Error processing request."
-                )
 
-        conn.close()
+        .stat-label {
+            color: #777;
 
-    return render_template(
-        "forgot-password.html",
-        message=message,
-        success=success
-    )
+            font-size: 10px;
 
+            text-transform: uppercase;
 
-@app.route("/logout")
-def logout():
+            letter-spacing: 1.3px;
 
-    session.clear()
+            margin-bottom: 12px;
+        }
 
-    return redirect(
-        url_for("login")
-    )
 
+        .stat-value {
+            color: #fff;
 
-# ── Dashboard ─────────────────────────────────────────────────────────────────
+            font-size: 29px;
 
-@app.route("/dashboard")
-@login_required
-def dashboard():
+            font-weight: bold;
+        }
 
-    attorney_id = session["attorney_id"]
 
-    conn = get_db()
+        .stat-value.gold {
+            color: gold;
+        }
 
-    # Total notes created by this attorney.
-    total_notes = conn.execute(
-        """
-        SELECT COUNT(*) AS count
-        FROM case_notes
-        WHERE attorney_id=?
-        """,
-        (attorney_id,)
-    ).fetchone()["count"]
 
-    # Number of witness videos for which
-    # this attorney has created case notes.
-    reviewed_witnesses = conn.execute(
-        """
-        SELECT COUNT(DISTINCT video) AS count
-        FROM case_notes
-        WHERE attorney_id=?
-        """,
-        (attorney_id,)
-    ).fetchone()["count"]
+        .status-online {
+            color: #6ee7a0;
 
-    # Latest activity.
-    recent_notes = conn.execute(
-        """
-        SELECT
-            video,
-            note,
-            created_at
-        FROM case_notes
-        WHERE attorney_id=?
-        ORDER BY id DESC
-        LIMIT 4
-        """,
-        (attorney_id,)
-    ).fetchall()
+            font-size: 17px;
 
-    conn.close()
+            font-weight: bold;
+        }
 
-    # Check whether the independent
-    # FastAPI AI service is available.
-    ai_online = False
 
-    try:
+        .status-offline {
+            color: #ff6b6b;
 
-        response = requests.get(
-            f"{FASTAPI_URL}/health",
-            timeout=2
-        )
+            font-size: 17px;
 
-        ai_online = (
-            response.status_code == 200
-        )
+            font-weight: bold;
+        }
 
-    except requests.RequestException:
 
-        ai_online = False
+        .status-dot {
+            display: inline-block;
 
-    return render_template(
-        "dashboard.html",
-        attorney_id=attorney_id,
-        total_notes=total_notes,
-        reviewed_witnesses=reviewed_witnesses,
-        recent_notes=recent_notes,
-        ai_online=ai_online
-    )
+            width: 8px;
+            height: 8px;
 
+            border-radius: 50%;
 
-# ── Video Routes ──────────────────────────────────────────────────────────────
+            margin-right: 6px;
 
-@app.route("/videos/<filename>")
-def serve_video(filename):
+            background: currentColor;
 
-    return send_from_directory(
-        str(BASE_DIR),
-        filename
-    )
+            box-shadow:
+                0 0 8px currentColor;
+        }
 
 
-@app.route("/videos1")
-@login_required
-def videos1():
+        /* ─────────────────────────────────────
+           SECTION
+           ───────────────────────────────────── */
 
-    return render_template(
-        "videos1.html"
-    )
+        .section-heading {
+            display: flex;
 
+            justify-content: space-between;
 
-# ── JWT API Token Endpoint (Flutter / Mobile) ────────────────────────────────
+            align-items: end;
 
-@app.route("/api/token", methods=["POST"])
-def api_token():
+            margin-top: 42px;
 
-    data = request.get_json()
+            margin-bottom: 17px;
+        }
 
-    if not data:
 
-        return jsonify({
-            "error": "Request body required"
-        }), 400
+        .section-heading h3 {
+            color: #fff;
 
-    conn = get_db()
+            font-size: 17px;
+        }
 
-    row = conn.execute(
-        """
-        SELECT password
-        FROM users
-        WHERE attorney_id=?
-        """,
-        (
-            data.get("attorney_id"),
-        )
-    ).fetchone()
 
-    conn.close()
+        .section-heading span {
+            color: #666;
 
-    if row and check_password_hash(
-        row["password"],
-        data.get("password", "")
-    ):
+            font-size: 11px;
 
-        return jsonify({
-            "token": make_jwt(
-                data["attorney_id"]
-            )
-        })
+            letter-spacing: 1px;
+        }
 
-    return jsonify({
-        "error": "Invalid credentials"
-    }), 401
 
+        /* ─────────────────────────────────────
+           WITNESS QUEUE
+           ───────────────────────────────────── */
 
-# ── Case Notes API ────────────────────────────────────────────────────────────
+        .witness-list {
+            display: grid;
 
-@app.route(
-    "/api/notes",
-    methods=["GET", "POST"]
-)
-@login_required
-def case_notes():
+            gap: 10px;
+        }
 
-    attorney_id = session["attorney_id"]
 
-    conn = get_db()
+        .witness-row {
+            display: grid;
 
-    if request.method == "POST":
+            grid-template-columns:
+                55px 1fr 150px 110px;
 
-        data = request.get_json()
+            align-items: center;
 
-        if not data:
+            gap: 15px;
 
-            conn.close()
+            background: #151515;
 
-            return jsonify({
-                "error": "Request body required"
-            }), 400
+            border: 1px solid #242424;
 
-        video = data.get("video", "").strip()
-        note = data.get("note", "").strip()
+            border-radius: 9px;
 
-        if not video or not note:
+            padding: 16px 18px;
 
-            conn.close()
+            transition: 0.2s;
+        }
 
-            return jsonify({
-                "error": (
-                    "Video and note are required"
-                )
-            }), 400
 
-        conn.execute(
-            """
-            INSERT INTO case_notes
-            (attorney_id, video, note)
-            VALUES (?, ?, ?)
-            """,
-            (
-                attorney_id,
-                video,
-                note
-            )
-        )
+        .witness-row:hover {
+            border-color:
+                rgba(255, 215, 0, 0.45);
 
-        conn.commit()
-        conn.close()
+            background: #181818;
+        }
 
-        return jsonify({
-            "status": "saved"
-        })
 
-    rows = conn.execute(
-        """
-        SELECT
-            id,
-            video,
-            note,
-            created_at
-        FROM case_notes
-        WHERE attorney_id=?
-        ORDER BY id DESC
-        """,
-        (
-            attorney_id,
-        )
-    ).fetchall()
+        .witness-number {
+            width: 38px;
+            height: 38px;
 
-    conn.close()
+            display: flex;
 
-    return jsonify([
-        dict(r) for r in rows
-    ])
+            align-items: center;
+            justify-content: center;
 
+            border-radius: 50%;
 
-@app.route(
-    "/api/notes/<int:note_id>",
-    methods=["DELETE"]
-)
-@login_required
-def delete_note(note_id):
+            background:
+                rgba(255, 215, 0, 0.08);
 
-    conn = get_db()
+            border:
+                1px solid rgba(255, 215, 0, 0.35);
 
-    conn.execute(
-        """
-        DELETE FROM case_notes
-        WHERE id=? AND attorney_id=?
-        """,
-        (
-            note_id,
-            session["attorney_id"]
-        )
-    )
+            color: gold;
 
-    conn.commit()
-    conn.close()
+            font-size: 12px;
 
-    return jsonify({
-        "status": "deleted"
-    })
+            font-weight: bold;
+        }
 
 
-# ── Emotion History Proxy ─────────────────────────────────────────────────────
+        .witness-info strong {
+            display: block;
 
-@app.route(
-    "/api/emotion_history/<video_name>"
-)
-@login_required
-def emotion_history(video_name):
+            color: #eee;
 
-    try:
+            font-size: 14px;
 
-        response = requests.get(
-            f"{FASTAPI_URL}/emotion_history/{video_name}",
-            timeout=3
-        )
+            margin-bottom: 5px;
+        }
 
-        return jsonify(
-            response.json()
-        ), response.status_code
 
-    except requests.RequestException:
+        .witness-info span {
+            color: #777;
 
-        return jsonify({
-            "history": []
-        }), 503
+            font-size: 12px;
+        }
 
 
-# ── Emotion Analysis Proxy ────────────────────────────────────────────────────
+        .ready {
+            color: #6ee7a0;
 
-@app.route(
-    "/api/analyze_emotion",
-    methods=["POST"]
-)
-@login_required
-def analyze_emotion_proxy():
+            font-size: 11px;
 
-    try:
+            font-weight: bold;
 
-        response = requests.post(
-            f"{FASTAPI_URL}/analyze_emotion/",
-            json=request.get_json(),
-            timeout=30
-        )
+            letter-spacing: 1px;
+        }
 
-        return jsonify(
-            response.json()
-        ), response.status_code
 
-    except requests.RequestException as e:
+        .analyze-btn {
+            display: inline-block;
 
-        return jsonify({
-            "error": "AI service unavailable",
-            "details": str(e)
-        }), 503
+            text-align: center;
 
+            padding: 9px 12px;
 
-# ── Voice Status ──────────────────────────────────────────────────────────────
+            background: transparent;
 
-is_speaking = False
+            color: gold;
 
+            border: 1px solid gold;
 
-@app.route(
-    "/update_voice_status",
-    methods=["POST"]
-)
-def update_voice_status():
+            border-radius: 5px;
 
-    global is_speaking
+            font-size: 11px;
 
-    data = request.get_json(
-        silent=True
-    ) or {}
+            font-weight: bold;
 
-    is_speaking = data.get(
-        "speaking",
-        False
-    )
+            text-decoration: none;
 
-    return jsonify({
-        "status": "updated",
-        "speaking": is_speaking
-    })
+            transition: 0.2s;
+        }
 
 
-# ── Start Flask Application ───────────────────────────────────────────────────
+        .analyze-btn:hover {
+            background: gold;
 
-if __name__ == "__main__":
+            color: #000;
+        }
 
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=True
-    )
+
+        /* ─────────────────────────────────────
+           LOWER GRID
+           ───────────────────────────────────── */
+
+        .lower-grid {
+            display: grid;
+
+            grid-template-columns:
+                1.35fr 0.9fr;
+
+            gap: 18px;
+
+            margin-top: 34px;
+        }
+
+
+        .panel {
+            background: #151515;
+
+            border: 1px solid #242424;
+
+            border-radius: 10px;
+
+            padding: 22px;
+        }
+
+
+        .panel-title {
+            color: gold;
+
+            font-size: 12px;
+
+            letter-spacing: 1.5px;
+
+            text-transform: uppercase;
+
+            padding-bottom: 14px;
+
+            margin-bottom: 12px;
+
+            border-bottom: 1px solid #292929;
+        }
+
+
+        /* ─────────────────────────────────────
+           RECENT ACTIVITY
+           ───────────────────────────────────── */
+
+        .activity-item {
+            padding: 13px 0;
+
+            border-bottom:
+                1px solid #232323;
+        }
+
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+
+        .activity-top {
+            display: flex;
+
+            justify-content: space-between;
+
+            gap: 15px;
+
+            margin-bottom: 6px;
+        }
+
+
+        .activity-video {
+            color: #eee;
+
+            font-size: 12px;
+
+            font-weight: bold;
+        }
+
+
+        .activity-time {
+            color: #555;
+
+            font-size: 10px;
+
+            white-space: nowrap;
+        }
+
+
+        .activity-note {
+            color: #888;
+
+            font-size: 12px;
+
+            line-height: 1.5;
+
+            word-break: break-word;
+        }
+
+
+        .empty-state {
+            color: #666;
+
+            font-size: 12px;
+
+            line-height: 1.6;
+
+            padding: 15px 0;
+        }
+
+
+        /* ─────────────────────────────────────
+           SYSTEM STATUS
+           ───────────────────────────────────── */
+
+        .service-row {
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            padding: 14px 0;
+
+            border-bottom:
+                1px solid #242424;
+        }
+
+
+        .service-row:last-child {
+            border-bottom: none;
+        }
+
+
+        .service-name {
+            color: #aaa;
+
+            font-size: 12px;
+        }
+
+
+        .service-state {
+            color: #6ee7a0;
+
+            font-size: 10px;
+
+            font-weight: bold;
+
+            letter-spacing: 1px;
+        }
+
+
+        .service-state.offline {
+            color: #ff6b6b;
+        }
+
+
+        /* ─────────────────────────────────────
+           CTA
+           ───────────────────────────────────── */
+
+        .cta {
+            margin-top: 36px;
+
+            padding: 30px;
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            gap: 25px;
+
+            background:
+                linear-gradient(
+                    100deg,
+                    rgba(255, 215, 0, 0.10),
+                    rgba(255, 215, 0, 0.02)
+                );
+
+            border:
+                1px solid rgba(255, 215, 0, 0.25);
+
+            border-radius: 11px;
+        }
+
+
+        .cta h3 {
+            color: #fff;
+
+            font-size: 18px;
+
+            margin-bottom: 7px;
+        }
+
+
+        .cta p {
+            color: #777;
+
+            font-size: 12px;
+
+            line-height: 1.5;
+        }
+
+
+        .primary-btn {
+            display: inline-block;
+
+            flex-shrink: 0;
+
+            background: gold;
+
+            color: #000;
+
+            padding: 13px 22px;
+
+            border-radius: 6px;
+
+            text-decoration: none;
+
+            font-size: 12px;
+
+            font-weight: bold;
+
+            transition: 0.2s;
+        }
+
+
+        .primary-btn:hover {
+            background: #ffe34d;
+
+            transform: translateY(-2px);
+        }
+
+
+        /* ─────────────────────────────────────
+           AI NOTICE
+           ───────────────────────────────────── */
+
+        .ai-notice {
+            margin-top: 25px;
+
+            padding: 16px 18px;
+
+            border-left: 3px solid gold;
+
+            background: #121212;
+
+            color: #777;
+
+            font-size: 11px;
+
+            line-height: 1.6;
+        }
+
+
+        .ai-notice strong {
+            color: #aaa;
+        }
+
+
+        /* ─────────────────────────────────────
+           RESPONSIVE
+           ───────────────────────────────────── */
+
+        @media (max-width: 900px) {
+
+            .stats-grid {
+                grid-template-columns:
+                    repeat(2, 1fr);
+            }
+
+
+            .lower-grid {
+                grid-template-columns: 1fr;
+            }
+
+
+            .witness-row {
+                grid-template-columns:
+                    45px 1fr 100px;
+            }
+
+
+            .ready {
+                display: none;
+            }
+        }
+
+
+        @media (max-width: 600px) {
+
+            header {
+                padding: 0 4%;
+            }
+
+
+            .attorney-info {
+                display: none;
+            }
+
+
+            main {
+                width: 92%;
+
+                padding-top: 35px;
+            }
+
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+
+            .witness-row {
+                grid-template-columns:
+                    42px 1fr;
+            }
+
+
+            .analyze-btn {
+                grid-column: 1 / -1;
+            }
+
+
+            .cta {
+                flex-direction: column;
+
+                align-items: flex-start;
+            }
+
+
+            .primary-btn {
+                width: 100%;
+
+                text-align: center;
+            }
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<header>
+
+    <div class="brand">
+
+        <div class="brand-icon">
+            ⚖
+        </div>
+
+        <div>
+
+            <h1>EMOJUDGE</h1>
+
+            <span>
+                WITNESS ANALYSIS SYSTEM
+            </span>
+
+        </div>
+
+    </div>
+
+
+    <div class="header-right">
+
+        <div class="attorney-info">
+
+            <small>
+                Signed in as
+            </small>
+
+            <strong>
+                {{ attorney_id }}
+            </strong>
+
+        </div>
+
+
+        <a
+            href="{{ url_for('logout') }}"
+            class="logout-btn"
+        >
+            Logout
+        </a>
+
+    </div>
+
+</header>
+
+
+<main>
+
+
+    <!-- HERO -->
+
+    <section class="hero">
+
+        <div class="eyebrow">
+            ANALYSIS COMMAND CENTER
+        </div>
+
+
+        <h2>
+            Welcome,
+            <span>{{ attorney_id }}</span>
+        </h2>
+
+
+        <p class="hero-description">
+
+            Review witness recordings, examine
+            model-estimated facial-expression
+            patterns and maintain case observations
+            from one analysis workspace.
+
+        </p>
+
+    </section>
+
+
+    <!-- STATS -->
+
+    <section class="stats-grid">
+
+
+        <div class="stat-card">
+
+            <div class="stat-label">
+                Available Witnesses
+            </div>
+
+            <div class="stat-value gold">
+                3
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-label">
+                Witnesses With Notes
+            </div>
+
+            <div class="stat-value">
+                {{ reviewed_witnesses }}
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-label">
+                Case Notes
+            </div>
+
+            <div class="stat-value">
+                {{ total_notes }}
+            </div>
+
+        </div>
+
+
+        <div class="stat-card">
+
+            <div class="stat-label">
+                AI Analysis Engine
+            </div>
+
+            {% if ai_online %}
+
+                <div class="status-online">
+
+                    <span class="status-dot"></span>
+
+                    ONLINE
+
+                </div>
+
+            {% else %}
+
+                <div class="status-offline">
+
+                    <span class="status-dot"></span>
+
+                    OFFLINE
+
+                </div>
+
+            {% endif %}
+
+        </div>
+
+
+    </section>
+
+
+    <!-- WITNESS QUEUE -->
+
+    <div class="section-heading">
+
+        <h3>
+            Witness Queue
+        </h3>
+
+        <span>
+            3 RECORDINGS AVAILABLE
+        </span>
+
+    </div>
+
+
+    <section class="witness-list">
+
+
+        <!-- WITNESS 1 -->
+
+        <div class="witness-row">
+
+            <div class="witness-number">
+                01
+            </div>
+
+
+            <div class="witness-info">
+
+                <strong>
+                    Witness 1
+                </strong>
+
+                <span>
+                    Convenience Store Burglary
+                </span>
+
+            </div>
+
+
+            <div class="ready">
+                ● READY
+            </div>
+
+
+            <a
+                href="{{ url_for('videos1') }}"
+                class="analyze-btn"
+            >
+                ANALYZE →
+            </a>
+
+        </div>
+
+
+        <!-- WITNESS 2 -->
+
+        <div class="witness-row">
+
+            <div class="witness-number">
+                02
+            </div>
+
+
+            <div class="witness-info">
+
+                <strong>
+                    Witness 2
+                </strong>
+
+                <span>
+                    Home Invasion
+                </span>
+
+            </div>
+
+
+            <div class="ready">
+                ● READY
+            </div>
+
+
+            <a
+                href="{{ url_for('videos1') }}"
+                class="analyze-btn"
+            >
+                ANALYZE →
+            </a>
+
+        </div>
+
+
+        <!-- WITNESS 3 -->
+
+        <div class="witness-row">
+
+            <div class="witness-number">
+                03
+            </div>
+
+
+            <div class="witness-info">
+
+                <strong>
+                    Witness 3
+                </strong>
+
+                <span>
+                    Corporate Fraud
+                </span>
+
+            </div>
+
+
+            <div class="ready">
+                ● READY
+            </div>
+
+
+            <a
+                href="{{ url_for('videos1') }}"
+                class="analyze-btn"
+            >
+                ANALYZE →
+            </a>
+
+        </div>
+
+
+    </section>
+
+
+    <!-- LOWER PANELS -->
+
+    <section class="lower-grid">
+
+
+        <!-- RECENT ACTIVITY -->
+
+        <div class="panel">
+
+            <div class="panel-title">
+                Recent Case Activity
+            </div>
+
+
+            {% if recent_notes %}
+
+
+                {% for item in recent_notes %}
+
+                    <div class="activity-item">
+
+                        <div class="activity-top">
+
+                            <span class="activity-video">
+
+                                {% if item["video"] == "video1.mp4" %}
+
+                                    Witness 1
+
+                                {% elif item["video"] == "video2.mp4" %}
+
+                                    Witness 2
+
+                                {% elif item["video"] == "video3.mp4" %}
+
+                                    Witness 3
+
+                                {% else %}
+
+                                    {{ item["video"] }}
+
+                                {% endif %}
+
+                            </span>
+
+
+                            <span class="activity-time">
+                                {{ item["created_at"] }}
+                            </span>
+
+                        </div>
+
+
+                        <div class="activity-note">
+                            {{ item["note"] }}
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+
+            {% else %}
+
+
+                <div class="empty-state">
+
+                    No case notes have been recorded yet.
+
+                    <br><br>
+
+                    Begin a witness analysis and save
+                    an observation to see activity here.
+
+                </div>
+
+
+            {% endif %}
+
+
+        </div>
+
+
+        <!-- SYSTEM STATUS -->
+
+        <div class="panel">
+
+            <div class="panel-title">
+                System Status
+            </div>
+
+
+            <div class="service-row">
+
+                <span class="service-name">
+                    Web Application
+                </span>
+
+                <span class="service-state">
+                    ● ONLINE
+                </span>
+
+            </div>
+
+
+            <div class="service-row">
+
+                <span class="service-name">
+                    AI Analysis Engine
+                </span>
+
+
+                {% if ai_online %}
+
+                    <span class="service-state">
+                        ● ONLINE
+                    </span>
+
+                {% else %}
+
+                    <span
+                        class="service-state offline"
+                    >
+                        ● OFFLINE
+                    </span>
+
+                {% endif %}
+
+            </div>
+
+
+            <div class="service-row">
+
+                <span class="service-name">
+                    Case Database
+                </span>
+
+                <span class="service-state">
+                    ● READY
+                </span>
+
+            </div>
+
+
+            <div class="service-row">
+
+                <span class="service-name">
+                    Authentication
+                </span>
+
+                <span class="service-state">
+                    ● ACTIVE
+                </span>
+
+            </div>
+
+        </div>
+
+
+    </section>
+
+
+    <!-- CALL TO ACTION -->
+
+    <section class="cta">
+
+        <div>
+
+            <h3>
+                Begin Witness Analysis
+            </h3>
+
+            <p>
+
+                Open the witness workspace to review
+                recordings, facial-expression signals,
+                timelines and case notes.
+
+            </p>
+
+        </div>
+
+
+        <a
+            href="{{ url_for('videos1') }}"
+            class="primary-btn"
+        >
+            START ANALYSIS →
+        </a>
+
+    </section>
+
+
+    <!-- RESPONSIBLE USE NOTICE -->
+
+    <div class="ai-notice">
+
+        <strong>
+            AI Observation Notice:
+        </strong>
+
+        EmoJudge identifies model-estimated
+        facial-expression patterns to assist human
+        review. These outputs are observational
+        signals and should not be interpreted as
+        proof of deception, intent, credibility or
+        a person's internal emotional state.
+
+    </div>
+
+
+</main>
+
+
+</body>
+
+</html>

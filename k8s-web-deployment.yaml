@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emojudge-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: emojudge-web
+  template:
+    metadata:
+      labels:
+        app: emojudge-web
+    spec:
+      containers:
+        - name: emojudge-web
+          image: sreeja6/emojudge-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - name: FASTAPI_URL
+              value: "http://emojudge-ai:8000"
