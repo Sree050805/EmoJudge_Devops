@@ -12,6 +12,7 @@ COPY signup.html .
 COPY forgot-password.html .
 COPY videos1.html .
 COPY users.db .
+COPY dashboard.html .
 
 COPY video1.mp4 .
 COPY video2.mp4 .
