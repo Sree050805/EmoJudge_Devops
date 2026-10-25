@@ -9,6 +9,7 @@ from flask import (
     send_from_directory,
     jsonify
 )
+
 import sqlite3
 import datetime
 import requests
@@ -29,19 +30,30 @@ app = Flask(
     static_folder=str(BASE_DIR)
 )
 
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "emojudge_secret_2025")
-JWT_SECRET = os.getenv("JWT_SECRET", "emojudge_jwt_secret")
+app.secret_key = os.getenv(
+    "FLASK_SECRET_KEY",
+    "emojudge_secret_2025"
+)
+
+JWT_SECRET = os.getenv(
+    "JWT_SECRET",
+    "emojudge_jwt_secret"
+)
 
 # Local development:
 # http://127.0.0.1:8000
 #
-# Docker/Kubernetes can override this using the FASTAPI_URL environment variable.
-FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
+# Docker / Kubernetes override this using FASTAPI_URL.
+FASTAPI_URL = os.getenv(
+    "FASTAPI_URL",
+    "http://127.0.0.1:8000"
+)
 
 
-# ── DB Helpers ────────────────────────────────────────────────────────────────
+# ── Database Helpers ──────────────────────────────────────────────────────────
 
 def get_db():
+
     db_path = BASE_DIR / "users.db"
 
     conn = sqlite3.connect(str(db_path))
@@ -51,6 +63,7 @@ def get_db():
 
 
 def init_db():
+
     conn = get_db()
 
     conn.executescript("""
@@ -77,12 +90,14 @@ def init_db():
 init_db()
 
 
-# ── Auth Helpers ──────────────────────────────────────────────────────────────
+# ── Authentication Helpers ────────────────────────────────────────────────────
 
 def make_jwt(attorney_id: str) -> str:
+
     payload = {
         "sub": attorney_id,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=8),
+        "exp": datetime.datetime.utcnow()
+        + datetime.timedelta(hours=8),
     }
 
     return pyjwt.encode(
@@ -93,7 +108,9 @@ def make_jwt(attorney_id: str) -> str:
 
 
 def verify_jwt(token: str):
+
     try:
+
         return pyjwt.decode(
             token,
             JWT_SECRET,
@@ -101,17 +118,22 @@ def verify_jwt(token: str):
         )
 
     except pyjwt.PyJWTError:
+
         return None
 
 
 def login_required(f):
+
     from functools import wraps
 
     @wraps(f)
     def decorated(*args, **kwargs):
 
         if "attorney_id" not in session:
-            return redirect(url_for("login"))
+
+            return redirect(
+                url_for("login")
+            )
 
         return f(*args, **kwargs)
 
@@ -122,16 +144,24 @@ def login_required(f):
 
 @app.route("/health")
 def health():
+
     return jsonify({
         "status": "healthy",
         "service": "emojudge-web"
     }), 200
 
 
-# ── Auth Routes ───────────────────────────────────────────────────────────────
+# ── Authentication Routes ─────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET", "POST"])
 def login():
+
+    # If already logged in, go directly to dashboard.
+    if request.method == "GET" and "attorney_id" in session:
+
+        return redirect(
+            url_for("dashboard")
+        )
 
     if request.method == "POST":
 
@@ -141,18 +171,29 @@ def login():
         conn = get_db()
 
         row = conn.execute(
-            "SELECT password FROM users WHERE attorney_id=?",
+            """
+            SELECT password
+            FROM users
+            WHERE attorney_id=?
+            """,
             (attorney_id,)
         ).fetchone()
 
         conn.close()
 
-        if row and check_password_hash(row["password"], password):
+        if row and check_password_hash(
+            row["password"],
+            password
+        ):
 
             session["attorney_id"] = attorney_id
             session["jwt"] = make_jwt(attorney_id)
 
-            return redirect("/videos1")
+            # NEW FLOW:
+            # Login -> Dashboard -> Witness Analysis
+            return redirect(
+                url_for("dashboard")
+            )
 
         return render_template(
             "login.html",
@@ -208,7 +249,9 @@ def signup():
 
         conn.close()
 
-        return redirect("/")
+        return redirect(
+            url_for("login")
+        )
 
     return render_template(
         "signup.html",
@@ -216,7 +259,10 @@ def signup():
     )
 
 
-@app.route("/forgot-password", methods=["GET", "POST"])
+@app.route(
+    "/forgot-password",
+    methods=["GET", "POST"]
+)
 def forgot_password():
 
     message = ""
@@ -229,13 +275,20 @@ def forgot_password():
         conn = get_db()
 
         user = conn.execute(
-            "SELECT * FROM users WHERE email=?",
+            """
+            SELECT *
+            FROM users
+            WHERE email=?
+            """,
             (email,)
         ).fetchone()
 
         if user:
 
-            message = "Reset link sent to your email."
+            message = (
+                "Reset link sent to your email."
+            )
+
             success = True
 
         else:
@@ -257,12 +310,18 @@ def forgot_password():
 
                 conn.commit()
 
-                message = "Email registered. Reset link sent."
+                message = (
+                    "Email registered. "
+                    "Reset link sent."
+                )
+
                 success = True
 
             except sqlite3.IntegrityError:
 
-                message = "Error processing request."
+                message = (
+                    "Error processing request."
+                )
 
         conn.close()
 
@@ -280,6 +339,83 @@ def logout():
 
     return redirect(
         url_for("login")
+    )
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@app.route("/dashboard")
+@login_required
+def dashboard():
+
+    attorney_id = session["attorney_id"]
+
+    conn = get_db()
+
+    # Total notes created by this attorney.
+    total_notes = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM case_notes
+        WHERE attorney_id=?
+        """,
+        (attorney_id,)
+    ).fetchone()["count"]
+
+    # Number of witness videos for which
+    # this attorney has created case notes.
+    reviewed_witnesses = conn.execute(
+        """
+        SELECT COUNT(DISTINCT video) AS count
+        FROM case_notes
+        WHERE attorney_id=?
+        """,
+        (attorney_id,)
+    ).fetchone()["count"]
+
+    # Latest activity.
+    recent_notes = conn.execute(
+        """
+        SELECT
+            video,
+            note,
+            created_at
+        FROM case_notes
+        WHERE attorney_id=?
+        ORDER BY id DESC
+        LIMIT 4
+        """,
+        (attorney_id,)
+    ).fetchall()
+
+    conn.close()
+
+    # Check whether the independent
+    # FastAPI AI service is available.
+    ai_online = False
+
+    try:
+
+        response = requests.get(
+            f"{FASTAPI_URL}/health",
+            timeout=2
+        )
+
+        ai_online = (
+            response.status_code == 200
+        )
+
+    except requests.RequestException:
+
+        ai_online = False
+
+    return render_template(
+        "dashboard.html",
+        attorney_id=attorney_id,
+        total_notes=total_notes,
+        reviewed_witnesses=reviewed_witnesses,
+        recent_notes=recent_notes,
+        ai_online=ai_online
     )
 
 
@@ -310,10 +446,20 @@ def api_token():
 
     data = request.get_json()
 
+    if not data:
+
+        return jsonify({
+            "error": "Request body required"
+        }), 400
+
     conn = get_db()
 
     row = conn.execute(
-        "SELECT password FROM users WHERE attorney_id=?",
+        """
+        SELECT password
+        FROM users
+        WHERE attorney_id=?
+        """,
         (
             data.get("attorney_id"),
         )
@@ -339,7 +485,10 @@ def api_token():
 
 # ── Case Notes API ────────────────────────────────────────────────────────────
 
-@app.route("/api/notes", methods=["GET", "POST"])
+@app.route(
+    "/api/notes",
+    methods=["GET", "POST"]
+)
 @login_required
 def case_notes():
 
@@ -351,6 +500,27 @@ def case_notes():
 
         data = request.get_json()
 
+        if not data:
+
+            conn.close()
+
+            return jsonify({
+                "error": "Request body required"
+            }), 400
+
+        video = data.get("video", "").strip()
+        note = data.get("note", "").strip()
+
+        if not video or not note:
+
+            conn.close()
+
+            return jsonify({
+                "error": (
+                    "Video and note are required"
+                )
+            }), 400
+
         conn.execute(
             """
             INSERT INTO case_notes
@@ -359,8 +529,8 @@ def case_notes():
             """,
             (
                 attorney_id,
-                data["video"],
-                data["note"]
+                video,
+                note
             )
         )
 
@@ -380,7 +550,7 @@ def case_notes():
             created_at
         FROM case_notes
         WHERE attorney_id=?
-        ORDER BY created_at DESC
+        ORDER BY id DESC
         """,
         (
             attorney_id,
@@ -394,7 +564,10 @@ def case_notes():
     ])
 
 
-@app.route("/api/notes/<int:note_id>", methods=["DELETE"])
+@app.route(
+    "/api/notes/<int:note_id>",
+    methods=["DELETE"]
+)
 @login_required
 def delete_note(note_id):
 
@@ -421,7 +594,9 @@ def delete_note(note_id):
 
 # ── Emotion History Proxy ─────────────────────────────────────────────────────
 
-@app.route("/api/emotion_history/<video_name>")
+@app.route(
+    "/api/emotion_history/<video_name>"
+)
 @login_required
 def emotion_history(video_name):
 
@@ -434,44 +609,62 @@ def emotion_history(video_name):
 
         return jsonify(
             response.json()
-        )
+        ), response.status_code
 
-    except Exception:
+    except requests.RequestException:
 
         return jsonify({
             "history": []
-        })
+        }), 503
+
 
 # ── Emotion Analysis Proxy ────────────────────────────────────────────────────
 
-@app.route("/api/analyze_emotion", methods=["POST"])
+@app.route(
+    "/api/analyze_emotion",
+    methods=["POST"]
+)
 @login_required
 def analyze_emotion_proxy():
+
     try:
+
         response = requests.post(
             f"{FASTAPI_URL}/analyze_emotion/",
             json=request.get_json(),
             timeout=30
         )
 
-        return jsonify(response.json()), response.status_code
+        return jsonify(
+            response.json()
+        ), response.status_code
 
     except requests.RequestException as e:
+
         return jsonify({
             "error": "AI service unavailable",
             "details": str(e)
         }), 503
+
+
 # ── Voice Status ──────────────────────────────────────────────────────────────
 
 is_speaking = False
 
 
-@app.route("/update_voice_status", methods=["POST"])
+@app.route(
+    "/update_voice_status",
+    methods=["POST"]
+)
 def update_voice_status():
 
     global is_speaking
 
-    is_speaking = request.json.get(
+    data = request.get_json(
+        silent=True
+    ) or {}
+
+    is_speaking = data.get(
         "speaking",
         False
     )
